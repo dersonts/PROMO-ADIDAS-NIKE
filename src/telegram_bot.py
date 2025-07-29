@@ -573,6 +573,17 @@ Use /alerts para criar alertas de preço.
         
         try:
             logger.info("Iniciando bot do Telegram...")
+            # The Application.run_polling() method requires an asyncio event loop.
+            # When called inside a separate thread there is no default event loop,
+            # which leads to the error "There is no current event loop in thread"
+            #【792043075202152†L28-L42】. To fix this, create and set a new event loop
+            # for the current thread if one does not already exist.
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            # Run the bot. run_polling() will start and block until the bot is stopped.
             self.application.run_polling(drop_pending_updates=True)
         except Exception as e:
             logger.error(f"Erro ao executar bot: {e}")

@@ -22,7 +22,15 @@ logger = logging.getLogger(__name__)
 
 def create_app():
     """Cria e configura a aplicação Flask"""
-    app = Flask(__name__)
+    # Configure Flask to look for templates in the project root.
+    # By default Flask searches for templates in a folder named "templates" inside the
+    # package. In this project the HTML templates live in the repository root
+    # alongside this "web" package. Without explicitly setting the template folder
+    # Jinja will raise TemplateNotFound errors when trying to render "dashboard.html"
+    # or "products.html"【575752310981307†L10-L16】. To fix this, point the template
+    # folder to the parent directory of this file, which contains the HTML files.
+    template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    app = Flask(__name__, template_folder=template_dir)
     app.secret_key = 'price_monitor_secret_key_change_in_production'
     
     # Habilita CORS

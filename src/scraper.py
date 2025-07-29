@@ -4,6 +4,7 @@ Suporta tanto scraping estático (requests/BeautifulSoup) quanto dinâmico (Play
 """
 
 import logging
+import json
 import random
 import time
 import re
@@ -116,12 +117,18 @@ class StaticScraper(BaseScraper):
         try:
             # Seletores comuns da Nike
             name_selectors = [
+                # Novo seletor usado no layout atual da Nike
+                'h1[data-testid="product-name"]',
+                # Seletores legados para compatibilidade
                 'h1[data-automation-id="product-title"]',
                 'h1.headline-5',
                 'h1.pdp_product_title'
             ]
-            
+
             price_selectors = [
+                # Novo seletor para preço principal no layout atual
+                'span[data-testid="main-price"]',
+                # Seletores legados
                 '[data-automation-id="product-price"]',
                 '.product-price',
                 '.price-current'
@@ -158,15 +165,19 @@ class StaticScraper(BaseScraper):
         try:
             # Seletores comuns da Adidas
             name_selectors = [
-                'h1[data-auto-id="product-title"]',
-                'h1.name___JQmUl',
-                'h1.product_title'
+                    # Novo seletor no layout atual (data-testid)
+                    'h1[data-testid="product-title"]',
+                    'h1[data-auto-id="product-title"]',
+                    'h1.name___JQmUl',
+                    'h1.product_title'
             ]
-            
+
             price_selectors = [
-                '[data-auto-id="price"]',
-                '.price___1JvDJ',
-                '.product-price'
+                    # Novo seletor para preço principal no layout atual
+                    '[data-testid="main-price"]',
+                    '[data-auto-id="price"]',
+                    '.price___1JvDJ',
+                    '.product-price'
             ]
             
             name = self._find_text_by_selectors(soup, name_selectors)
@@ -240,14 +251,39 @@ class StaticScraper(BaseScraper):
 class DynamicScraper(BaseScraper):
     """Scraper para conteúdo dinâmico usando Playwright"""
     
-    def __init__(self):
+    def __init__(self, browser_type: str = "chromium"):
+        """
+        Inicializa o scraper dinâmico.
+
+        Args:
+            browser_type (str): Tipo de navegador a ser usado pelo Playwright. Pode ser
+                "chromium", "firefox" ou "webkit". O padrão é "chromium". Alguns sites
+                apresentam erros específicos (como ERR_HTTP2_PROTOCOL_ERROR) em
+                navegadores baseados em Chromium, por isso permitimos a troca para
+                Firefox ou WebKit de forma controlada.
+        """
         super().__init__()
+        # O fallback estático é compartilhado entre instâncias. Quando o scraping
+        # dinâmico falha ou retorna dados incompletos, reutilizamos o StaticScraper
+        # para tentar extrair as informações com BeautifulSoup.
+        self.static_scraper = StaticScraper()
         self.playwright = None
         self.browser = None
+        # Guarda o tipo de navegador solicitado. Valores válidos são 'chromium',
+        # 'firefox' e 'webkit'. Se um valor inválido for passado, o Playwright
+        # lançará um erro quando tentarmos acessar o atributo correspondente.
+        self.browser_type = browser_type
     
     def __enter__(self):
+        # Inicia o Playwright e lança o navegador apropriado. Permitimos
+        # customizar o tipo de navegador via self.browser_type para contornar
+        # problemas específicos de alguns sites (por exemplo, Adidas com
+        # ERR_HTTP2_PROTOCOL_ERROR no Chromium). Caso o tipo seja inválido, o
+        # Playwright lançará um AttributeError naturalmente.
         self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(
+        # Usa getattr para obter a classe do navegador dinamicamente.
+        browser_launcher = getattr(self.playwright, self.browser_type)
+        self.browser = browser_launcher.launch(
             headless=True,
             args=['--no-sandbox', '--disable-dev-shm-usage']
         )
@@ -286,8 +322,20 @@ class DynamicScraper(BaseScraper):
                 result = self._scrape_adidas_dynamic(page, url)
             else:
                 result = self._scrape_generic_dynamic(page, url)
-            
+
             page.close()
+            # If dynamic scraping failed or returned incomplete data, fall back to
+            # the static scraper. This avoids crashing when dynamic scraping
+            # cannot find the data and provides a second chance to extract the
+            # information using BeautifulSoup. The static scraper lives on
+            # self.static_scraper, initialized in __init__.
+            if result is None:
+                logger.info(f"Falling back to static scraping for: {url}")
+                try:
+                    return self.static_scraper.scrape_product(url)
+                except Exception as e:
+                    logger.error(f"Erro no fallback scraping estático de {url}: {e}")
+                    return None
             return result
                 
         except Exception as e:
@@ -298,16 +346,24 @@ class DynamicScraper(BaseScraper):
         """Scraping específico para Nike (método dinâmico)"""
         try:
             # Aguarda elementos carregarem
-            page.wait_for_selector('h1', timeout=10000)
-            
+            # O layout atual da Nike usa h1 com data-testid="product-name"
+            # Em versões legadas apenas 'h1' pode existir. Use seletor CSS combinado.
+            page.wait_for_selector('h1, [data-testid="product-name"]', timeout=10000)
+
             # Seletores para Nike
             name_selectors = [
+                # Novo seletor usado no layout atual da Nike
+                'h1[data-testid="product-name"]',
+                # Seletores legados para compatibilidade
                 'h1[data-automation-id="product-title"]',
                 'h1.headline-5',
                 'h1.pdp_product_title'
             ]
-            
+
             price_selectors = [
+                # Novo seletor para preço principal no layout atual
+                'span[data-testid="main-price"]',
+                # Seletores legados
                 '[data-automation-id="product-price"]',
                 '.product-price',
                 '.price-current'
@@ -315,7 +371,39 @@ class DynamicScraper(BaseScraper):
             
             name = self._find_text_by_selectors_dynamic(page, name_selectors)
             price_text = self._find_text_by_selectors_dynamic(page, price_selectors)
-            
+
+            # Se não encontrarmos nome ou preço via seletores, tente extrair a partir de JSON-LD
+            if not name or not price_text:
+                try:
+                    html = page.content()
+                    soup_fallback = BeautifulSoup(html, 'html.parser')
+                    for script_tag in soup_fallback.find_all('script', {'type': 'application/ld+json'}):
+                        try:
+                            data = json.loads(script_tag.string or script_tag.get_text())
+                        except Exception:
+                            continue
+                        # Alguns sites embutem uma lista de objetos no JSON-LD
+                        if isinstance(data, list):
+                            for entry in data:
+                                if isinstance(entry, dict) and entry.get('@type') == 'Product':
+                                    if not name:
+                                        name = entry.get('name') or ''
+                                    if not price_text:
+                                        offers = entry.get('offers', {})
+                                        price_text = offers.get('price') or offers.get('priceSpecification', {}).get('price') or ''
+                                    if name and price_text:
+                                        break
+                        elif isinstance(data, dict) and data.get('@type') == 'Product':
+                            if not name:
+                                name = data.get('name') or ''
+                            if not price_text:
+                                offers = data.get('offers', {})
+                                price_text = offers.get('price') or offers.get('priceSpecification', {}).get('price') or ''
+                        if name and price_text:
+                            break
+                except Exception:
+                    pass
+
             if not name or not price_text:
                 logger.warning(f"Dados incompletos para Nike dinâmico: {url}")
                 return None
@@ -346,16 +434,22 @@ class DynamicScraper(BaseScraper):
         """Scraping específico para Adidas (método dinâmico)"""
         try:
             # Aguarda elementos carregarem
-            page.wait_for_selector('h1', timeout=10000)
-            
+            # O layout atual da Adidas utiliza h1 com data-testid="product-title". Use
+            # seletor combinado para manter compatibilidade com layouts legados.
+            page.wait_for_selector('h1, [data-testid="product-title"]', timeout=10000)
+
             # Seletores para Adidas
             name_selectors = [
+                # Novo seletor (data-testid) para nome de produto
+                'h1[data-testid="product-title"]',
                 'h1[data-auto-id="product-title"]',
                 'h1.name___JQmUl',
                 'h1.product_title'
             ]
-            
+
             price_selectors = [
+                # Novo seletor para preço principal no layout atual
+                '[data-testid="main-price"]',
                 '[data-auto-id="price"]',
                 '.price___1JvDJ',
                 '.product-price'
@@ -363,13 +457,45 @@ class DynamicScraper(BaseScraper):
             
             name = self._find_text_by_selectors_dynamic(page, name_selectors)
             price_text = self._find_text_by_selectors_dynamic(page, price_selectors)
-            
+
+            # Se não encontrarmos nome ou preço via seletores, tente extrair a partir de JSON-LD
+            if not name or not price_text:
+                try:
+                    html = page.content()
+                    soup_fallback = BeautifulSoup(html, 'html.parser')
+                    for script_tag in soup_fallback.find_all('script', {'type': 'application/ld+json'}):
+                        try:
+                            data = json.loads(script_tag.string or script_tag.get_text())
+                        except Exception:
+                            continue
+                        # Alguns sites embutem uma lista de objetos no JSON-LD
+                        if isinstance(data, list):
+                            for entry in data:
+                                if isinstance(entry, dict) and entry.get('@type') == 'Product':
+                                    if not name:
+                                        name = entry.get('name') or ''
+                                    if not price_text:
+                                        offers = entry.get('offers', {})
+                                        price_text = offers.get('price') or offers.get('priceSpecification', {}).get('price') or ''
+                                    if name and price_text:
+                                        break
+                        elif isinstance(data, dict) and data.get('@type') == 'Product':
+                            if not name:
+                                name = data.get('name') or ''
+                            if not price_text:
+                                offers = data.get('offers', {})
+                                price_text = offers.get('price') or offers.get('priceSpecification', {}).get('price') or ''
+                        if name and price_text:
+                            break
+                except Exception:
+                    pass
+
             if not name or not price_text:
                 logger.warning(f"Dados incompletos para Adidas dinâmico: {url}")
                 return None
-            
+
             price = self.extract_price(price_text)
-            
+
             # Busca imagem
             image_url = ""
             try:
@@ -378,7 +504,7 @@ class DynamicScraper(BaseScraper):
                     image_url = img_element.get_attribute('src') or ""
             except:
                 pass
-            
+
             return ProductData(
                 name=name.strip(),
                 price=price,
@@ -438,6 +564,23 @@ class DynamicScraper(BaseScraper):
                 continue
         return ""
 
+    # ------------------------------------------------------------------
+    # Fallback static methods
+    #
+    # When called, these methods delegate to the underlying StaticScraper instance
+    # created in __init__. Defining these methods avoids an AttributeError when
+    # code paths inadvertently try to call `_scrape_nike_static` or `_scrape_adidas_static`
+    # on a DynamicScraper instance. They simply forward the call to the corresponding
+    # method on the static scraper. If static scraping also fails, the error will
+    # be propagated by the StaticScraper implementation.
+    def _scrape_nike_static(self, soup: BeautifulSoup, url: str) -> Optional[ProductData]:
+        """Delegates Nike static scraping to the StaticScraper instance."""
+        return self.static_scraper._scrape_nike_static(soup, url)
+
+    def _scrape_adidas_static(self, soup: BeautifulSoup, url: str) -> Optional[ProductData]:
+        """Delegates Adidas static scraping to the StaticScraper instance."""
+        return self.static_scraper._scrape_adidas_static(soup, url)
+
 class ScraperManager:
     """Gerenciador de scrapers que decide qual usar baseado no site"""
     
@@ -455,7 +598,11 @@ class ScraperManager:
         
         if needs_dynamic:
             logger.info(f"Usando scraper dinâmico para: {domain}")
-            with DynamicScraper() as dynamic_scraper:
+            # Escolhe o tipo de navegador baseado no domínio. Determinados sites,
+            # como o Adidas, retornam erros de protocolo HTTP2 quando acessados
+            # com Chromium headless. Nesses casos utilizamos o Firefox.
+            browser_type = 'firefox' if 'adidas' in domain else 'chromium'
+            with DynamicScraper(browser_type=browser_type) as dynamic_scraper:
                 return dynamic_scraper.scrape_product(url)
         else:
             logger.info(f"Usando scraper estático para: {domain}")
