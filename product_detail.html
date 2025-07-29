@@ -1,0 +1,551 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} - Bot de Monitoramento de Preços{% endblock %}
+
+{% block extra_css %}
+<style>
+    .price-chart {
+        height: 400px;
+    }
+    
+    .product-header {
+        background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    
+    .price-trend-up {
+        color: #dc2626;
+    }
+    
+    .price-trend-down {
+        color: #059669;
+    }
+    
+    .price-trend-stable {
+        color: #64748b;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('products') }}">Produtos</a></li>
+                <li class="breadcrumb-item active">{{ product.name[:30] }}{% if product.name|length > 30 %}...{% endif %}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<!-- Cabeçalho do Produto -->
+<div class="product-header">
+    <div class="row align-items-center">
+        <div class="col-md-2">
+            {% if product.image_url %}
+            <img src="{{ product.image_url }}" alt="{{ product.name }}" 
+                 class="img-fluid rounded shadow-sm">
+            {% else %}
+            <div class="bg-white rounded shadow-sm d-flex align-items-center justify-content-center"
+                 style="height: 150px;">
+                <i class="bi bi-image display-4 text-muted"></i>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-7">
+            <h1 class="display-6 fw-bold mb-3">{{ product.name }}</h1>
+            
+            <div class="row mb-3">
+                <div class="col-auto">
+                    <div class="text-center">
+                        <div class="display-4 fw-bold text-primary">
+                            {{ product.current_price|currency }}
+                        </div>
+                        <small class="text-muted">Preço Atual</small>
+                    </div>
+                </div>
+                
+                {% if product.original_price and product.original_price != product.current_price %}
+                <div class="col-auto">
+                    <div class="text-center">
+                        <div class="h4 text-muted">
+                            <s>{{ product.original_price|currency }}</s>
+                        </div>
+                        <small class="text-muted">Preço Original</small>
+                    </div>
+                </div>
+                
+                <div class="col-auto">
+                    <div class="text-center">
+                        {% set discount = ((product.original_price - product.current_price) / product.original_price * 100) %}
+                        <div class="h4 text-success">
+                            -{{ "%.0f"|format(discount) }}%
+                        </div>
+                        <small class="text-muted">Desconto</small>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="mb-3">
+                {% if product.active %}
+                <span class="badge bg-success fs-6">
+                    <i class="bi bi-check-circle me-1"></i>Monitoramento Ativo
+                </span>
+                {% else %}
+                <span class="badge bg-secondary fs-6">
+                    <i class="bi bi-pause-circle me-1"></i>Monitoramento Pausado
+                </span>
+                {% endif %}
+                
+                <span class="badge bg-info fs-6 ms-2">
+                    <i class="bi bi-clock me-1"></i>Atualizado {{ product.last_updated|timeago }}
+                </span>
+            </div>
+        </div>
+        
+        <div class="col-md-3 text-end">
+            <div class="d-grid gap-2">
+                <a href="{{ product.url }}" target="_blank" class="btn btn-primary btn-lg">
+                    <i class="bi bi-box-arrow-up-right me-2"></i>Ver no Site
+                </a>
+                
+                <button class="btn btn-success btn-lg" onclick="updateProduct({{ product.id }}, this)">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Atualizar Preço
+                </button>
+                
+                <button class="btn btn-warning btn-lg" onclick="addAlert()">
+                    <i class="bi bi-bell me-2"></i>Criar Alerta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Gráfico de Histórico de Preços -->
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-graph-up me-2"></i>Histórico de Preços
+                </h5>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="updateChart('7d')">7 dias</button>
+                    <button class="btn btn-outline-secondary btn-sm active" onclick="updateChart('30d')">30 dias</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="updateChart('90d')">90 dias</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="updateChart('all')">Tudo</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="priceChart" class="price-chart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Estatísticas e Alertas -->
+    <div class="col-lg-4">
+        <!-- Estatísticas -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-bar-chart me-2"></i>Estatísticas
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if price_history %}
+                {% set prices = price_history|map(attribute='price')|list %}
+                {% set min_price = prices|min %}
+                {% set max_price = prices|max %}
+                {% set avg_price = (prices|sum / prices|length) %}
+                
+                <div class="row text-center">
+                    <div class="col-12 mb-3">
+                        <div class="h4 text-success">{{ min_price|currency }}</div>
+                        <small class="text-muted">Menor Preço</small>
+                    </div>
+                    
+                    <div class="col-12 mb-3">
+                        <div class="h4 text-danger">{{ max_price|currency }}</div>
+                        <small class="text-muted">Maior Preço</small>
+                    </div>
+                    
+                    <div class="col-12 mb-3">
+                        <div class="h4 text-info">{{ avg_price|currency }}</div>
+                        <small class="text-muted">Preço Médio</small>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="text-center">
+                    <small class="text-muted">
+                        <i class="bi bi-clock me-1"></i>
+                        {{ price_history|length }} registros de preço
+                    </small>
+                </div>
+                {% else %}
+                <div class="text-center text-muted">
+                    <i class="bi bi-graph-up display-4 mb-2"></i>
+                    <p>Sem dados de histórico ainda</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Alertas Ativos -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-bell me-2"></i>Alertas Ativos
+                </h5>
+                <button class="btn btn-outline-primary btn-sm" onclick="addAlert()">
+                    <i class="bi bi-plus me-1"></i>Novo
+                </button>
+            </div>
+            <div class="card-body">
+                {% if alerts %}
+                {% for alert in alerts %}
+                <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded">
+                    <div>
+                        {% if alert.alert_type == 'static' %}
+                        <span class="badge bg-info mb-1">Preço Fixo</span>
+                        <div class="small">Abaixo de {{ alert.threshold_price|currency }}</div>
+                        {% elif alert.alert_type == 'percentage' %}
+                        <span class="badge bg-warning mb-1">Porcentagem</span>
+                        <div class="small">Queda de {{ alert.percentage_threshold }}%</div>
+                        {% elif alert.alert_type == 'lowest_ever' %}
+                        <span class="badge bg-success mb-1">Mínimo Histórico</span>
+                        <div class="small">Novo menor preço</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-danger btn-sm" 
+                                onclick="deleteAlert({{ alert.id }}, this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="text-center text-muted">
+                    <i class="bi bi-bell-slash display-4 mb-2"></i>
+                    <p>Nenhum alerta configurado</p>
+                    <button class="btn btn-primary btn-sm" onclick="addAlert()">
+                        <i class="bi bi-plus me-1"></i>Criar Primeiro Alerta
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Adicionar Alerta -->
+<div class="modal fade" id="alertModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-bell me-2"></i>Criar Alerta para {{ product.name[:30] }}...
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="alertForm">
+                    <div class="mb-3">
+                        <label for="alertType" class="form-label">Tipo de Alerta</label>
+                        <select class="form-select" id="alertType" required>
+                            <option value="">Selecione o tipo</option>
+                            <option value="static">Preço abaixo de um valor</option>
+                            <option value="percentage">Queda percentual</option>
+                            <option value="lowest_ever">Novo mínimo histórico</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="thresholdPriceGroup" style="display: none;">
+                        <label for="thresholdPrice" class="form-label">Preço Limite (R$)</label>
+                        <input type="number" class="form-control" id="thresholdPrice" step="0.01" min="0">
+                        <div class="form-text">
+                            Preço atual: {{ product.current_price|currency }}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="percentageThresholdGroup" style="display: none;">
+                        <label for="percentageThreshold" class="form-label">Porcentagem de Queda (%)</label>
+                        <input type="number" class="form-control" id="percentageThreshold" step="1" min="1" max="100">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="chatId" class="form-label">ID do Chat (Telegram)</label>
+                        <input type="text" class="form-control" id="chatId" placeholder="Deixe vazio para alertas via web">
+                        <div class="form-text">
+                            Para receber alertas no Telegram, insira seu chat ID.
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveAlert()">
+                    <i class="bi bi-check-lg me-1"></i>Criar Alerta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let priceChart;
+const productId = {{ product.id }};
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    initPriceChart();
+    setupAlertModal();
+});
+
+// Inicializar gráfico de preços
+async function initPriceChart() {
+    try {
+        const response = await fetch(`/api/product/${productId}/history?limit=50`);
+        const history = await response.json();
+        
+        if (history.length === 0) {
+            document.getElementById('priceChart').parentElement.innerHTML = 
+                '<div class="text-center text-muted py-5"><i class="bi bi-graph-up display-4 mb-2"></i><p>Sem dados de histórico ainda</p></div>';
+            return;
+        }
+        
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        
+        // Prepara os dados
+        const labels = history.reverse().map(h => new Date(h.timestamp).toLocaleDateString('pt-BR'));
+        const prices = history.map(h => h.price);
+        
+        priceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Preço (R$)',
+                    data: prices,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#2563eb',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: '#ffffff',
+                        bodyColor: '#ffffff',
+                        borderColor: '#2563eb',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function(context) {
+                                return 'Preço: ' + formatCurrency(context.parsed.y);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        ticks: {
+                            callback: function(value) {
+                                return formatCurrency(value);
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('Erro ao carregar histórico:', error);
+    }
+}
+
+// Atualizar produto
+async function updateProduct(productId, button) {
+    const originalText = showLoading(button);
+    
+    try {
+        const response = await fetch(`/api/product/${productId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Produto atualizado! Preço: ${formatCurrency(data.new_price)}`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Erro ao atualizar produto', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    } finally {
+        hideLoading(button, originalText);
+    }
+}
+
+// Configurar modal de alerta
+function setupAlertModal() {
+    const alertType = document.getElementById('alertType');
+    alertType.addEventListener('change', function() {
+        const thresholdPriceGroup = document.getElementById('thresholdPriceGroup');
+        const percentageThresholdGroup = document.getElementById('percentageThresholdGroup');
+        
+        // Esconde todos os campos
+        thresholdPriceGroup.style.display = 'none';
+        percentageThresholdGroup.style.display = 'none';
+        
+        // Mostra o campo apropriado
+        if (this.value === 'static') {
+            thresholdPriceGroup.style.display = 'block';
+        } else if (this.value === 'percentage') {
+            percentageThresholdGroup.style.display = 'block';
+        }
+    });
+}
+
+// Adicionar alerta
+function addAlert() {
+    const modal = new bootstrap.Modal(document.getElementById('alertModal'));
+    modal.show();
+}
+
+// Salvar alerta
+async function saveAlert() {
+    const alertData = {
+        product_id: productId,
+        alert_type: document.getElementById('alertType').value,
+        chat_id: document.getElementById('chatId').value || 'web_user',
+        threshold_price: document.getElementById('thresholdPrice').value ? parseFloat(document.getElementById('thresholdPrice').value) : null,
+        percentage_threshold: document.getElementById('percentageThreshold').value ? parseFloat(document.getElementById('percentageThreshold').value) : null
+    };
+    
+    // Validação
+    if (!alertData.alert_type) {
+        showToast('Selecione o tipo de alerta', 'warning');
+        return;
+    }
+    
+    if (alertData.alert_type === 'static' && !alertData.threshold_price) {
+        showToast('Informe o preço limite', 'warning');
+        return;
+    }
+    
+    if (alertData.alert_type === 'percentage' && !alertData.percentage_threshold) {
+        showToast('Informe a porcentagem de queda', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/add_alert', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(alertData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Alerta criado com sucesso!', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('alertModal'));
+            modal.hide();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Erro ao criar alerta', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    }
+}
+
+// Excluir alerta
+async function deleteAlert(alertId, button) {
+    if (!confirm('Tem certeza que deseja excluir este alerta?')) {
+        return;
+    }
+    
+    const originalText = showLoading(button);
+    
+    try {
+        const response = await fetch(`/api/alert/${alertId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Alerta excluído com sucesso!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Erro ao excluir alerta', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    } finally {
+        hideLoading(button, originalText);
+    }
+}
+
+// Atualizar período do gráfico
+function updateChart(period) {
+    // Atualiza botões ativos
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Aqui você pode implementar a lógica para filtrar dados por período
+    // Por enquanto, apenas uma demonstração visual
+    showToast(`Gráfico atualizado para ${period}`, 'info');
+}
+</script>
+{% endblock %}
+

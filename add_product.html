@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Adicionar Produto - Bot de Monitoramento de Preços{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('products') }}">Produtos</a></li>
+                <li class="breadcrumb-item active">Adicionar Produto</li>
+            </ol>
+        </nav>
+        
+        <h1 class="display-6 fw-bold text-primary">
+            <i class="bi bi-plus-circle me-3"></i>Adicionar Produto
+        </h1>
+        <p class="lead text-muted">Adicione um novo produto para monitoramento de preços</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-box-seam me-2"></i>Informações do Produto
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="addProductForm">
+                    <div class="mb-4">
+                        <label for="url" class="form-label fw-bold">
+                            <i class="bi bi-link-45deg me-1"></i>URL do Produto *
+                        </label>
+                        <input type="url" class="form-control form-control-lg" id="url" name="url" 
+                               placeholder="https://exemplo.com/produto" required>
+                        <div class="form-text">
+                            Cole aqui a URL completa da página do produto que deseja monitorar
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-info-circle me-2"></i>Sites Suportados
+                                </h6>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <ul class="list-unstyled mb-0">
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>Nike</li>
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>Adidas</li>
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>Sites genéricos</li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            O bot detecta automaticamente o tipo de site e usa a estratégia de scraping mais adequada.
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <button type="button" class="btn btn-outline-info me-2" onclick="testUrl()">
+                            <i class="bi bi-bug me-1"></i>Testar URL
+                        </button>
+                        <small class="text-muted">
+                            Recomendado: teste a URL antes de adicionar para verificar se os dados podem ser extraídos
+                        </small>
+                    </div>
+                    
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('products') }}" class="btn btn-outline-secondary btn-lg me-md-2">
+                            <i class="bi bi-arrow-left me-1"></i>Voltar
+                        </a>
+                        <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                            <i class="bi bi-plus-circle me-1"></i>Adicionar Produto
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Resultado do Teste -->
+        <div id="testResult" class="card mt-4" style="display: none;">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-clipboard-data me-2"></i>Resultado do Teste
+                </h5>
+            </div>
+            <div class="card-body" id="testResultContent">
+                <!-- Conteúdo será preenchido via JavaScript -->
+            </div>
+        </div>
+        
+        <!-- Dicas -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-lightbulb me-2"></i>Dicas para Melhores Resultados
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-check-circle text-success me-2"></i>Faça</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-arrow-right me-2"></i>Use URLs diretas de produtos</li>
+                            <li><i class="bi bi-arrow-right me-2"></i>Verifique se a página carrega corretamente</li>
+                            <li><i class="bi bi-arrow-right me-2"></i>Teste a URL antes de adicionar</li>
+                            <li><i class="bi bi-arrow-right me-2"></i>Use sites de e-commerce conhecidos</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-x-circle text-danger me-2"></i>Evite</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-arrow-right me-2"></i>URLs de busca ou listagem</li>
+                            <li><i class="bi bi-arrow-right me-2"></i>Links encurtados (bit.ly, etc.)</li>
+                            <li><i class="bi bi-arrow-right me-2"></i>URLs com parâmetros de rastreamento</li>
+                            <li><i class="bi bi-arrow-right me-2"></i>Sites que exigem login</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Teste de URL
+async function testUrl() {
+    const urlInput = document.getElementById('url');
+    const url = urlInput.value.trim();
+    
+    if (!url) {
+        showToast('Digite uma URL para testar', 'warning');
+        urlInput.focus();
+        return;
+    }
+    
+    if (!isValidUrl(url)) {
+        showToast('Digite uma URL válida', 'warning');
+        urlInput.focus();
+        return;
+    }
+    
+    const testButton = event.target;
+    const originalText = showLoading(testButton);
+    
+    try {
+        const response = await fetch('/test_scraper', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `url=${encodeURIComponent(url)}`
+        });
+        
+        const html = await response.text();
+        
+        // Extrai o resultado do teste do HTML retornado
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const testResultElement = doc.querySelector('#testResultContent');
+        
+        if (testResultElement) {
+            document.getElementById('testResultContent').innerHTML = testResultElement.innerHTML;
+            document.getElementById('testResult').style.display = 'block';
+            
+            // Scroll para o resultado
+            document.getElementById('testResult').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }
+        
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro ao testar URL', 'danger');
+    } finally {
+        hideLoading(testButton, originalText);
+    }
+}
+
+// Validação de URL
+function isValidUrl(string) {
+    try {
+        new URL(string);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Validação do formulário
+document.getElementById('addProductForm').addEventListener('submit', function(e) {
+    const url = document.getElementById('url').value.trim();
+    
+    if (!url) {
+        e.preventDefault();
+        showToast('Digite a URL do produto', 'warning');
+        document.getElementById('url').focus();
+        return;
+    }
+    
+    if (!isValidUrl(url)) {
+        e.preventDefault();
+        showToast('Digite uma URL válida', 'warning');
+        document.getElementById('url').focus();
+        return;
+    }
+    
+    // Mostra loading no botão de submit
+    const submitBtn = document.getElementById('submitBtn');
+    showLoading(submitBtn);
+});
+
+// Auto-validação da URL enquanto digita
+document.getElementById('url').addEventListener('input', function() {
+    const url = this.value.trim();
+    const isValid = !url || isValidUrl(url);
+    
+    if (isValid) {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+    } else {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+    }
+});
+
+// Limpa o resultado do teste quando a URL muda
+document.getElementById('url').addEventListener('input', function() {
+    document.getElementById('testResult').style.display = 'none';
+});
+
+// Auto-focus no campo URL
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('url').focus();
+});
+</script>
+{% endblock %}
+

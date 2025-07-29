@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Bot de Monitoramento de Preços{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-6 fw-bold text-primary">
+            <i class="bi bi-speedometer2 me-3"></i>Dashboard
+        </h1>
+        <p class="lead text-muted">Visão geral do monitoramento de preços</p>
+    </div>
+</div>
+
+<!-- Estatísticas -->
+<div class="row mb-5">
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-primary mb-2">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+                <h3 class="fw-bold">{{ stats.get('total_products', 0) }}</h3>
+                <p class="text-muted mb-0">Total de Produtos</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-success mb-2">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <h3 class="fw-bold">{{ stats.get('active_products', 0) }}</h3>
+                <p class="text-muted mb-0">Produtos Ativos</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-warning mb-2">
+                    <i class="bi bi-bell"></i>
+                </div>
+                <h3 class="fw-bold">{{ stats.get('active_alerts', 0) }}</h3>
+                <p class="text-muted mb-0">Alertas Ativos</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card h-100">
+            <div class="card-body text-center">
+                <div class="display-4 text-info mb-2">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+                <h3 class="fw-bold">{{ stats.get('total_price_records', 0) }}</h3>
+                <p class="text-muted mb-0">Registros de Preço</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ações Rápidas -->
+<div class="row mb-5">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-lightning-charge me-2"></i>Ações Rápidas
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <a href="{{ url_for('add_product') }}" class="btn btn-primary btn-lg w-100">
+                            <i class="bi bi-plus-circle me-2"></i>
+                            Adicionar Produto
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="{{ url_for('products') }}" class="btn btn-success btn-lg w-100">
+                            <i class="bi bi-box-seam me-2"></i>
+                            Ver Produtos
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="{{ url_for('alerts') }}" class="btn btn-warning btn-lg w-100">
+                            <i class="bi bi-bell me-2"></i>
+                            Gerenciar Alertas
+                        </a>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <a href="{{ url_for('test_scraper') }}" class="btn btn-info btn-lg w-100">
+                            <i class="bi bi-bug me-2"></i>
+                            Testar Scraper
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Produtos Recentes -->
+{% if recent_products %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-clock-history me-2"></i>Produtos Recentes
+                </h5>
+                <a href="{{ url_for('products') }}" class="btn btn-outline-primary btn-sm">
+                    Ver Todos <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for product in recent_products %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card product-card h-100">
+                            <div class="card-body">
+                                <div class="d-flex align-items-start">
+                                    {% if product.image_url %}
+                                    <img src="{{ product.image_url }}" alt="{{ product.name }}" class="product-image me-3">
+                                    {% else %}
+                                    <div class="product-image me-3 bg-light d-flex align-items-center justify-content-center">
+                                        <i class="bi bi-image text-muted"></i>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <div class="flex-grow-1">
+                                        <h6 class="card-title mb-2">
+                                            <a href="{{ url_for('product_detail', product_id=product.id) }}" class="text-decoration-none">
+                                                {{ product.name[:50] }}{% if product.name|length > 50 %}...{% endif %}
+                                            </a>
+                                        </h6>
+                                        
+                                        <div class="mb-2">
+                                            <span class="price-badge price-stable">
+                                                {{ product.current_price|currency }}
+                                            </span>
+                                        </div>
+                                        
+                                        <small class="text-muted">
+                                            <i class="bi bi-clock me-1"></i>
+                                            Atualizado {{ product.last_updated|timeago }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-transparent">
+                                <div class="d-flex justify-content-between">
+                                    <a href="{{ product.url }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>Ver Site
+                                    </a>
+                                    <button class="btn btn-outline-success btn-sm" onclick="updateProduct({{ product.id }}, this)">
+                                        <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="display-1 text-muted mb-3">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+                <h4 class="text-muted mb-3">Nenhum produto monitorado ainda</h4>
+                <p class="text-muted mb-4">Comece adicionando seu primeiro produto para monitoramento de preços</p>
+                <a href="{{ url_for('add_product') }}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle me-2"></i>Adicionar Primeiro Produto
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function updateProduct(productId, button) {
+    const originalText = showLoading(button);
+    
+    try {
+        const response = await fetch(`/api/product/${productId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Produto atualizado! Preço: ${formatCurrency(data.new_price)}`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Erro ao atualizar produto', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    } finally {
+        hideLoading(button, originalText);
+    }
+}
+
+// Atualiza estatísticas a cada 30 segundos
+setInterval(async () => {
+    try {
+        const response = await fetch('/api/stats');
+        const stats = await response.json();
+        
+        // Atualiza os valores na tela sem recarregar
+        document.querySelectorAll('.stats-card h3').forEach((element, index) => {
+            const values = [stats.total_products, stats.active_products, stats.active_alerts, stats.total_price_records];
+            if (values[index] !== undefined) {
+                element.textContent = values[index];
+            }
+        });
+    } catch (error) {
+        console.error('Erro ao atualizar estatísticas:', error);
+    }
+}, 30000);
+</script>
+{% endblock %}
+

@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block title %}Produtos - Bot de Monitoramento de Preços{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="display-6 fw-bold text-primary">
+            <i class="bi bi-box-seam me-3"></i>Produtos Monitorados
+        </h1>
+        <p class="lead text-muted">Gerencie todos os produtos em monitoramento</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <a href="{{ url_for('add_product') }}" class="btn btn-primary btn-lg">
+            <i class="bi bi-plus-circle me-2"></i>Adicionar Produto
+        </a>
+    </div>
+</div>
+
+{% if products %}
+<!-- Filtros e Busca -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" class="form-control" id="searchInput" placeholder="Buscar produtos...">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="statusFilter">
+                            <option value="">Todos os Status</option>
+                            <option value="active">Ativos</option>
+                            <option value="inactive">Inativos</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="sortBy">
+                            <option value="name">Ordenar por Nome</option>
+                            <option value="price">Ordenar por Preço</option>
+                            <option value="date">Ordenar por Data</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de Produtos -->
+<div class="row" id="productsContainer">
+    {% for product in products %}
+    <div class="col-md-6 col-lg-4 mb-4 product-item" 
+         data-name="{{ product.name.lower() }}" 
+         data-status="{{ 'active' if product.active else 'inactive' }}"
+         data-price="{{ product.current_price }}"
+         data-date="{{ product.last_updated }}">
+        <div class="card product-card h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-start mb-3">
+                    {% if product.image_url %}
+                    <img src="{{ product.image_url }}" alt="{{ product.name }}" class="product-image me-3">
+                    {% else %}
+                    <div class="product-image me-3 bg-light d-flex align-items-center justify-content-center">
+                        <i class="bi bi-image text-muted"></i>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="flex-grow-1">
+                        <h5 class="card-title mb-2">
+                            <a href="{{ url_for('product_detail', product_id=product.id) }}" class="text-decoration-none">
+                                {{ product.name[:60] }}{% if product.name|length > 60 %}...{% endif %}
+                            </a>
+                        </h5>
+                        
+                        <div class="mb-2">
+                            <span class="price-badge price-stable">
+                                {{ product.current_price|currency }}
+                            </span>
+                            {% if product.original_price and product.original_price != product.current_price %}
+                            <small class="text-muted ms-2">
+                                <s>{{ product.original_price|currency }}</s>
+                            </small>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-2">
+                            {% if product.active %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle me-1"></i>Ativo
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary">
+                                <i class="bi bi-pause-circle me-1"></i>Inativo
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <small class="text-muted">
+                            <i class="bi bi-clock me-1"></i>
+                            Atualizado {{ product.last_updated|timeago }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-footer bg-transparent">
+                <div class="d-flex justify-content-between flex-wrap gap-2">
+                    <div class="btn-group" role="group">
+                        <a href="{{ url_for('product_detail', product_id=product.id) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-eye me-1"></i>Detalhes
+                        </a>
+                        <a href="{{ product.url }}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Site
+                        </a>
+                    </div>
+                    
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-success btn-sm" onclick="updateProduct({{ product.id }}, this)">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+                        </button>
+                        <button class="btn btn-outline-warning btn-sm" onclick="addAlert({{ product.id }})">
+                            <i class="bi bi-bell me-1"></i>Alerta
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Paginação (se necessário) -->
+<div class="row mt-4">
+    <div class="col-12 text-center">
+        <p class="text-muted">
+            Mostrando {{ products|length }} produto{{ 's' if products|length != 1 else '' }}
+        </p>
+    </div>
+</div>
+
+{% else %}
+<!-- Estado vazio -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="display-1 text-muted mb-3">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+                <h4 class="text-muted mb-3">Nenhum produto encontrado</h4>
+                <p class="text-muted mb-4">Comece adicionando produtos para monitoramento de preços</p>
+                <a href="{{ url_for('add_product') }}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle me-2"></i>Adicionar Primeiro Produto
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal para Adicionar Alerta -->
+<div class="modal fade" id="alertModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-bell me-2"></i>Adicionar Alerta
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="alertForm">
+                    <input type="hidden" id="alertProductId">
+                    
+                    <div class="mb-3">
+                        <label for="alertType" class="form-label">Tipo de Alerta</label>
+                        <select class="form-select" id="alertType" required>
+                            <option value="">Selecione o tipo</option>
+                            <option value="static">Preço abaixo de um valor</option>
+                            <option value="percentage">Queda percentual</option>
+                            <option value="lowest_ever">Novo mínimo histórico</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="thresholdPriceGroup" style="display: none;">
+                        <label for="thresholdPrice" class="form-label">Preço Limite (R$)</label>
+                        <input type="number" class="form-control" id="thresholdPrice" step="0.01" min="0">
+                    </div>
+                    
+                    <div class="mb-3" id="percentageThresholdGroup" style="display: none;">
+                        <label for="percentageThreshold" class="form-label">Porcentagem de Queda (%)</label>
+                        <input type="number" class="form-control" id="percentageThreshold" step="1" min="1" max="100">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="chatId" class="form-label">ID do Chat (Telegram)</label>
+                        <input type="text" class="form-control" id="chatId" placeholder="Deixe vazio para alertas via web">
+                        <div class="form-text">
+                            Para receber alertas no Telegram, insira seu chat ID. 
+                            <a href="#" onclick="showChatIdHelp()">Como obter?</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveAlert()">
+                    <i class="bi bi-check-lg me-1"></i>Salvar Alerta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Variáveis globais
+let allProducts = [];
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    allProducts = Array.from(document.querySelectorAll('.product-item'));
+    setupFilters();
+});
+
+// Configuração dos filtros
+function setupFilters() {
+    const searchInput = document.getElementById('searchInput');
+    const statusFilter = document.getElementById('statusFilter');
+    const sortBy = document.getElementById('sortBy');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', filterProducts);
+    }
+    if (statusFilter) {
+        statusFilter.addEventListener('change', filterProducts);
+    }
+    if (sortBy) {
+        sortBy.addEventListener('change', sortProducts);
+    }
+    
+    // Configuração do modal de alerta
+    const alertType = document.getElementById('alertType');
+    if (alertType) {
+        alertType.addEventListener('change', toggleAlertFields);
+    }
+}
+
+// Filtrar produtos
+function filterProducts() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    
+    allProducts.forEach(product => {
+        const name = product.dataset.name;
+        const status = product.dataset.status;
+        
+        const matchesSearch = !searchTerm || name.includes(searchTerm);
+        const matchesStatus = !statusFilter || status === statusFilter;
+        
+        if (matchesSearch && matchesStatus) {
+            product.style.display = 'block';
+            product.classList.add('fade-in');
+        } else {
+            product.style.display = 'none';
+        }
+    });
+}
+
+// Ordenar produtos
+function sortProducts() {
+    const sortBy = document.getElementById('sortBy').value;
+    const container = document.getElementById('productsContainer');
+    
+    const sortedProducts = allProducts.sort((a, b) => {
+        switch (sortBy) {
+            case 'name':
+                return a.dataset.name.localeCompare(b.dataset.name);
+            case 'price':
+                return parseFloat(a.dataset.price) - parseFloat(b.dataset.price);
+            case 'date':
+                return new Date(b.dataset.date) - new Date(a.dataset.date);
+            default:
+                return 0;
+        }
+    });
+    
+    // Reordena os elementos no DOM
+    sortedProducts.forEach(product => {
+        container.appendChild(product);
+    });
+}
+
+// Atualizar produto
+async function updateProduct(productId, button) {
+    const originalText = showLoading(button);
+    
+    try {
+        const response = await fetch(`/api/product/${productId}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Produto atualizado! Preço: ${formatCurrency(data.new_price)}`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Erro ao atualizar produto', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    } finally {
+        hideLoading(button, originalText);
+    }
+}
+
+// Adicionar alerta
+function addAlert(productId) {
+    document.getElementById('alertProductId').value = productId;
+    const modal = new bootstrap.Modal(document.getElementById('alertModal'));
+    modal.show();
+}
+
+// Alternar campos do alerta
+function toggleAlertFields() {
+    const alertType = document.getElementById('alertType').value;
+    const thresholdPriceGroup = document.getElementById('thresholdPriceGroup');
+    const percentageThresholdGroup = document.getElementById('percentageThresholdGroup');
+    
+    // Esconde todos os campos
+    thresholdPriceGroup.style.display = 'none';
+    percentageThresholdGroup.style.display = 'none';
+    
+    // Mostra o campo apropriado
+    if (alertType === 'static') {
+        thresholdPriceGroup.style.display = 'block';
+    } else if (alertType === 'percentage') {
+        percentageThresholdGroup.style.display = 'block';
+    }
+}
+
+// Salvar alerta
+async function saveAlert() {
+    const form = document.getElementById('alertForm');
+    const formData = new FormData(form);
+    
+    const alertData = {
+        product_id: parseInt(document.getElementById('alertProductId').value),
+        alert_type: document.getElementById('alertType').value,
+        chat_id: document.getElementById('chatId').value || 'web_user',
+        threshold_price: document.getElementById('thresholdPrice').value ? parseFloat(document.getElementById('thresholdPrice').value) : null,
+        percentage_threshold: document.getElementById('percentageThreshold').value ? parseFloat(document.getElementById('percentageThreshold').value) : null
+    };
+    
+    // Validação
+    if (!alertData.alert_type) {
+        showToast('Selecione o tipo de alerta', 'warning');
+        return;
+    }
+    
+    if (alertData.alert_type === 'static' && !alertData.threshold_price) {
+        showToast('Informe o preço limite', 'warning');
+        return;
+    }
+    
+    if (alertData.alert_type === 'percentage' && !alertData.percentage_threshold) {
+        showToast('Informe a porcentagem de queda', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/add_alert', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(alertData)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Alerta adicionado com sucesso!', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('alertModal'));
+            modal.hide();
+            form.reset();
+        } else {
+            showToast(data.error || 'Erro ao adicionar alerta', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    }
+}
+
+// Ajuda para obter Chat ID
+function showChatIdHelp() {
+    const helpText = `
+        Para obter seu Chat ID do Telegram:
+        1. Inicie uma conversa com @userinfobot
+        2. Envie qualquer mensagem
+        3. O bot retornará seu Chat ID
+        4. Use esse número no campo acima
+    `;
+    
+    showToast(helpText, 'info');
+}
+</script>
+{% endblock %}
+

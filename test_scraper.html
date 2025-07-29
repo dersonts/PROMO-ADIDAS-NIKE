@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Testar Scraper - Bot de Monitoramento de Preços{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active">Testar Scraper</li>
+            </ol>
+        </nav>
+        
+        <h1 class="display-6 fw-bold text-primary">
+            <i class="bi bi-bug me-3"></i>Testar Scraper
+        </h1>
+        <p class="lead text-muted">Teste a extração de dados de produtos em diferentes sites</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <!-- Formulário de Teste -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-link-45deg me-2"></i>URL para Teste
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="testForm">
+                    <div class="mb-3">
+                        <label for="url" class="form-label fw-bold">URL do Produto</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text">
+                                <i class="bi bi-link-45deg"></i>
+                            </span>
+                            <input type="url" class="form-control" id="url" name="url" 
+                                   placeholder="https://exemplo.com/produto" required>
+                            <button type="submit" class="btn btn-primary" id="testBtn">
+                                <i class="bi bi-search me-1"></i>Testar
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            Cole aqui a URL do produto que deseja testar
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- URLs de Exemplo -->
+                <div class="mt-4">
+                    <h6><i class="bi bi-bookmark me-2"></i>URLs de Exemplo</h6>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="fillExampleUrl('nike')">
+                            Nike
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="fillExampleUrl('adidas')">
+                            Adidas
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="fillExampleUrl('generic')">
+                            Site Genérico
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Resultado do Teste -->
+        {% if test_result %}
+        <div class="card mt-4" id="testResultCard">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-clipboard-data me-2"></i>Resultado do Teste
+                </h5>
+                <span class="badge bg-{{ 'success' if test_result.success else 'danger' }} fs-6">
+                    {{ 'Sucesso' if test_result.success else 'Erro' }}
+                </span>
+            </div>
+            <div class="card-body" id="testResultContent">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>URL Testada:</strong>
+                        <p class="text-break">
+                            <a href="{{ test_result.url }}" target="_blank" class="text-decoration-none">
+                                {{ test_result.url }}
+                                <i class="bi bi-box-arrow-up-right ms-1"></i>
+                            </a>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Tipo de Scraper:</strong>
+                        <p>
+                            <span class="badge bg-info">
+                                {{ test_result.scraper_type|title }}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                
+                {% if test_result.success and test_result.data %}
+                <!-- Dados Extraídos -->
+                <div class="alert alert-success">
+                    <h6><i class="bi bi-check-circle me-2"></i>Dados extraídos com sucesso!</h6>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="bi bi-box-seam me-2"></i>Informações do Produto
+                                </h6>
+                                
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <td class="fw-bold">Nome:</td>
+                                        <td>{{ test_result.data.name or 'Não encontrado' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="fw-bold">Preço Atual:</td>
+                                        <td>
+                                            {% if test_result.data.price %}
+                                                <span class="price-badge price-stable">
+                                                    {{ test_result.data.price|currency }}
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted">Não encontrado</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="fw-bold">Preço Original:</td>
+                                        <td>
+                                            {% if test_result.data.original_price and test_result.data.original_price != test_result.data.price %}
+                                                {{ test_result.data.original_price|currency }}
+                                            {% else %}
+                                                <span class="text-muted">Mesmo que atual</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="fw-bold">Disponibilidade:</td>
+                                        <td>{{ test_result.data.availability or 'Não informado' }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        {% if test_result.data.image_url %}
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h6 class="card-title">
+                                    <i class="bi bi-image me-2"></i>Imagem
+                                </h6>
+                                <img src="{{ test_result.data.image_url }}" 
+                                     alt="Imagem do produto" 
+                                     class="img-fluid rounded"
+                                     style="max-height: 200px;">
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="card">
+                            <div class="card-body text-center text-muted">
+                                <i class="bi bi-image display-4 mb-2"></i>
+                                <p>Imagem não encontrada</p>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Ações -->
+                <div class="mt-4 text-center">
+                    <a href="{{ url_for('add_product') }}?url={{ test_result.url|urlencode }}" 
+                       class="btn btn-success btn-lg">
+                        <i class="bi bi-plus-circle me-2"></i>Adicionar Este Produto
+                    </a>
+                </div>
+                
+                {% else %}
+                <!-- Erro -->
+                <div class="alert alert-danger">
+                    <h6><i class="bi bi-exclamation-triangle me-2"></i>Erro na extração de dados</h6>
+                    <p class="mb-0">{{ test_result.error or 'Erro desconhecido' }}</p>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>Possíveis causas:</h6>
+                    <ul>
+                        <li>A página não carregou completamente</li>
+                        <li>O site usa estrutura HTML não suportada</li>
+                        <li>O site possui proteções anti-bot</li>
+                        <li>A URL não é de uma página de produto</li>
+                    </ul>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>Sugestões:</h6>
+                    <ul>
+                        <li>Verifique se a URL está correta</li>
+                        <li>Tente uma URL diferente do mesmo site</li>
+                        <li>Use sites de e-commerce conhecidos (Nike, Adidas)</li>
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Informações sobre o Scraper -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle me-2"></i>Como Funciona o Scraper
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-lightning me-2"></i>Scraper Estático</h6>
+                        <p>Usado para sites simples que não dependem de JavaScript:</p>
+                        <ul>
+                            <li>Mais rápido</li>
+                            <li>Menor uso de recursos</li>
+                            <li>Ideal para sites básicos</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-cpu me-2"></i>Scraper Dinâmico</h6>
+                        <p>Usado para sites complexos com JavaScript:</p>
+                        <ul>
+                            <li>Executa JavaScript</li>
+                            <li>Aguarda carregamento completo</li>
+                            <li>Ideal para Nike, Adidas, etc.</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h6><i class="bi bi-shield-check me-2"></i>Medidas Anti-Bot</h6>
+                <p>O scraper implementa várias técnicas para evitar detecção:</p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <ul>
+                            <li>Rotação de User-Agents</li>
+                            <li>Delays aleatórios entre requisições</li>
+                            <li>Headers HTTP realistas</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <ul>
+                            <li>Navegador headless (Playwright)</li>
+                            <li>Simulação de comportamento humano</li>
+                            <li>Tratamento de erros robusto</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// URLs de exemplo
+const exampleUrls = {
+    nike: 'https://www.nike.com.br/produto/tenis-nike-air-max-90-masculino',
+    adidas: 'https://www.adidas.com.br/tenis-ultraboost-22',
+    generic: 'https://www.exemplo.com/produto'
+};
+
+// Preenche URL de exemplo
+function fillExampleUrl(type) {
+    const urlInput = document.getElementById('url');
+    urlInput.value = exampleUrls[type] || '';
+    urlInput.focus();
+}
+
+// Validação do formulário
+document.getElementById('testForm').addEventListener('submit', function(e) {
+    const url = document.getElementById('url').value.trim();
+    
+    if (!url) {
+        e.preventDefault();
+        showToast('Digite uma URL para testar', 'warning');
+        document.getElementById('url').focus();
+        return;
+    }
+    
+    if (!isValidUrl(url)) {
+        e.preventDefault();
+        showToast('Digite uma URL válida', 'warning');
+        document.getElementById('url').focus();
+        return;
+    }
+    
+    // Mostra loading
+    const testBtn = document.getElementById('testBtn');
+    showLoading(testBtn);
+});
+
+// Validação de URL
+function isValidUrl(string) {
+    try {
+        new URL(string);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Auto-validação da URL
+document.getElementById('url').addEventListener('input', function() {
+    const url = this.value.trim();
+    const isValid = !url || isValidUrl(url);
+    
+    if (isValid) {
+        this.classList.remove('is-invalid');
+        this.classList.add('is-valid');
+    } else {
+        this.classList.remove('is-valid');
+        this.classList.add('is-invalid');
+    }
+});
+
+// Auto-focus no campo URL
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('url').focus();
+    
+    // Se há resultado, scroll para ele
+    const resultCard = document.getElementById('testResultCard');
+    if (resultCard) {
+        setTimeout(() => {
+            resultCard.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        }, 500);
+    }
+});
+
+// Copia URL para clipboard
+function copyUrl(url) {
+    navigator.clipboard.writeText(url).then(() => {
+        showToast('URL copiada para a área de transferência', 'success');
+    }).catch(() => {
+        showToast('Erro ao copiar URL', 'danger');
+    });
+}
+</script>
+{% endblock %}
+

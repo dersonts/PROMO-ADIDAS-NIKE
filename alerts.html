@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+
+{% block title %}Alertas - Bot de Monitoramento de Preços{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="display-6 fw-bold text-primary">
+            <i class="bi bi-bell me-3"></i>Alertas de Preço
+        </h1>
+        <p class="lead text-muted">Gerencie todos os alertas configurados</p>
+    </div>
+    <div class="col-md-4 text-md-end">
+        <a href="{{ url_for('products') }}" class="btn btn-primary btn-lg">
+            <i class="bi bi-plus-circle me-2"></i>Adicionar Alerta
+        </a>
+    </div>
+</div>
+
+{% if alerts %}
+<!-- Estatísticas dos Alertas -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <div class="display-4 text-success mb-2">
+                    <i class="bi bi-bell-fill"></i>
+                </div>
+                <h3 class="fw-bold">{{ alerts|selectattr('active')|list|length }}</h3>
+                <p class="text-muted mb-0">Alertas Ativos</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <div class="display-4 text-info mb-2">
+                    <i class="bi bi-graph-down-arrow"></i>
+                </div>
+                <h3 class="fw-bold">{{ alerts|selectattr('alert_type', 'equalto', 'static')|list|length }}</h3>
+                <p class="text-muted mb-0">Preço Fixo</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <div class="display-4 text-warning mb-2">
+                    <i class="bi bi-percent"></i>
+                </div>
+                <h3 class="fw-bold">{{ alerts|selectattr('alert_type', 'equalto', 'percentage')|list|length }}</h3>
+                <p class="text-muted mb-0">Porcentagem</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de Alertas -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-ul me-2"></i>Todos os Alertas
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Produto</th>
+                                <th>Tipo de Alerta</th>
+                                <th>Condição</th>
+                                <th>Status</th>
+                                <th>Último Disparo</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in alerts %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if alert.product.image_url %}
+                                        <img src="{{ alert.product.image_url }}" 
+                                             alt="{{ alert.product.name }}" 
+                                             class="rounded me-3"
+                                             style="width: 50px; height: 50px; object-fit: cover;">
+                                        {% else %}
+                                        <div class="bg-light rounded me-3 d-flex align-items-center justify-content-center"
+                                             style="width: 50px; height: 50px;">
+                                            <i class="bi bi-image text-muted"></i>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        <div>
+                                            <h6 class="mb-1">
+                                                <a href="{{ url_for('product_detail', product_id=alert.product.id) }}" 
+                                                   class="text-decoration-none">
+                                                    {{ alert.product.name[:40] }}{% if alert.product.name|length > 40 %}...{% endif %}
+                                                </a>
+                                            </h6>
+                                            <small class="text-muted">
+                                                Preço atual: {{ alert.product.current_price|currency }}
+                                            </small>
+                                        </div>
+                                    </div>
+                                </td>
+                                
+                                <td>
+                                    {% if alert.alert_type == 'static' %}
+                                        <span class="badge bg-info">
+                                            <i class="bi bi-cash me-1"></i>Preço Fixo
+                                        </span>
+                                    {% elif alert.alert_type == 'percentage' %}
+                                        <span class="badge bg-warning">
+                                            <i class="bi bi-percent me-1"></i>Porcentagem
+                                        </span>
+                                    {% elif alert.alert_type == 'lowest_ever' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-arrow-down me-1"></i>Mínimo Histórico
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                
+                                <td>
+                                    {% if alert.alert_type == 'static' %}
+                                        Abaixo de {{ alert.threshold_price|currency }}
+                                    {% elif alert.alert_type == 'percentage' %}
+                                        Queda de {{ alert.percentage_threshold }}%
+                                    {% elif alert.alert_type == 'lowest_ever' %}
+                                        Novo mínimo histórico
+                                    {% endif %}
+                                </td>
+                                
+                                <td>
+                                    {% if alert.active %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle me-1"></i>Ativo
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="bi bi-pause-circle me-1"></i>Inativo
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                
+                                <td>
+                                    {% if alert.last_triggered %}
+                                        <small class="text-muted">
+                                            {{ alert.last_triggered|timeago }}
+                                        </small>
+                                    {% else %}
+                                        <small class="text-muted">Nunca</small>
+                                    {% endif %}
+                                </td>
+                                
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        {% if alert.active %}
+                                        <button class="btn btn-outline-warning btn-sm" 
+                                                onclick="toggleAlert({{ alert.id }}, false, this)">
+                                            <i class="bi bi-pause me-1"></i>Pausar
+                                        </button>
+                                        {% else %}
+                                        <button class="btn btn-outline-success btn-sm" 
+                                                onclick="toggleAlert({{ alert.id }}, true, this)">
+                                            <i class="bi bi-play me-1"></i>Ativar
+                                        </button>
+                                        {% endif %}
+                                        
+                                        <button class="btn btn-outline-danger btn-sm" 
+                                                onclick="deleteAlert({{ alert.id }}, this)">
+                                            <i class="bi bi-trash me-1"></i>Excluir
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<!-- Estado vazio -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <div class="display-1 text-muted mb-3">
+                    <i class="bi bi-bell-slash"></i>
+                </div>
+                <h4 class="text-muted mb-3">Nenhum alerta configurado</h4>
+                <p class="text-muted mb-4">
+                    Configure alertas para ser notificado quando os preços dos produtos baixarem
+                </p>
+                <a href="{{ url_for('products') }}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle me-2"></i>Criar Primeiro Alerta
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Informações sobre Alertas -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle me-2"></i>Tipos de Alertas
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <div class="display-4 text-info mb-2">
+                                <i class="bi bi-cash"></i>
+                            </div>
+                            <h5>Preço Fixo</h5>
+                            <p class="text-muted">
+                                Alerta quando o preço ficar abaixo de um valor específico que você definir.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <div class="display-4 text-warning mb-2">
+                                <i class="bi bi-percent"></i>
+                            </div>
+                            <h5>Queda Percentual</h5>
+                            <p class="text-muted">
+                                Alerta quando o preço cair uma porcentagem específica em relação ao último preço.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="text-center mb-3">
+                            <div class="display-4 text-success mb-2">
+                                <i class="bi bi-arrow-down"></i>
+                            </div>
+                            <h5>Mínimo Histórico</h5>
+                            <p class="text-muted">
+                                Alerta quando o produto atingir o menor preço já registrado no histórico.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Alternar status do alerta
+async function toggleAlert(alertId, activate, button) {
+    const originalText = showLoading(button);
+    
+    try {
+        const response = await fetch(`/api/alert/${alertId}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ active: activate })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Alerta ${activate ? 'ativado' : 'pausado'} com sucesso!`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Erro ao alterar status do alerta', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    } finally {
+        hideLoading(button, originalText);
+    }
+}
+
+// Excluir alerta
+async function deleteAlert(alertId, button) {
+    if (!confirm('Tem certeza que deseja excluir este alerta?')) {
+        return;
+    }
+    
+    const originalText = showLoading(button);
+    
+    try {
+        const response = await fetch(`/api/alert/${alertId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Alerta excluído com sucesso!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Erro ao excluir alerta', 'danger');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        showToast('Erro de conexão', 'danger');
+    } finally {
+        hideLoading(button, originalText);
+    }
+}
+
+// Filtrar alertas
+function filterAlerts() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const typeFilter = document.getElementById('typeFilter').value;
+    
+    const rows = document.querySelectorAll('tbody tr');
+    
+    rows.forEach(row => {
+        const productName = row.querySelector('h6 a').textContent.toLowerCase();
+        const status = row.querySelector('.badge').textContent.includes('Ativo') ? 'active' : 'inactive';
+        const type = row.querySelector('td:nth-child(2) .badge').textContent.toLowerCase();
+        
+        const matchesSearch = !searchTerm || productName.includes(searchTerm);
+        const matchesStatus = !statusFilter || status === statusFilter;
+        const matchesType = !typeFilter || type.includes(typeFilter);
+        
+        if (matchesSearch && matchesStatus && matchesType) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Adicionar filtros se houver alertas
+document.addEventListener('DOMContentLoaded', function() {
+    const alertsTable = document.querySelector('table');
+    if (alertsTable) {
+        // Adicionar controles de filtro
+        const cardHeader = document.querySelector('.card-header h5');
+        if (cardHeader) {
+            cardHeader.parentElement.innerHTML += `
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <input type="text" class="form-control" id="searchInput" placeholder="Buscar por produto...">
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" id="statusFilter">
+                            <option value="">Todos os Status</option>
+                            <option value="active">Ativos</option>
+                            <option value="inactive">Inativos</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-select" id="typeFilter">
+                            <option value="">Todos os Tipos</option>
+                            <option value="fixo">Preço Fixo</option>
+                            <option value="porcentagem">Porcentagem</option>
+                            <option value="mínimo">Mínimo Histórico</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            
+            // Adicionar event listeners
+            document.getElementById('searchInput').addEventListener('input', filterAlerts);
+            document.getElementById('statusFilter').addEventListener('change', filterAlerts);
+            document.getElementById('typeFilter').addEventListener('change', filterAlerts);
+        }
+    }
+});
+</script>
+{% endblock %}
+
